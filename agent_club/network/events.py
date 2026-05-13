@@ -61,6 +61,8 @@ class EventBus:
             "message_count": 0,
             "knowledge_count": 0,
         }
+        self._owner_fp: Optional[str] = None  # fingerprint of the human owner's agent
+        self._room_keys: Dict[str, Any] = {}  # room_id → RoomCipher (for decrypting owner's messages)
 
     # ── subscribe / emit ──────────────────────────────
 
@@ -143,6 +145,18 @@ class EventBus:
 
     # ── query ────────────────────────────────────────
 
+    def set_owner(self, fingerprint: str):
+        """Set the owner agent's fingerprint for decryption context."""
+        self._owner_fp = fingerprint
+
+    def register_room_key(self, room_id: str, cipher):
+        """Register a RoomCipher for an owner's room (enables decryption)."""
+        self._room_keys[room_id] = cipher
+
+    @property
+    def owner_fp(self) -> Optional[str]:
+        return self._owner_fp
+
     def get_history(self, limit: int = 50) -> List[dict]:
         """Return the last N events (for late-joining viewers)."""
         return [e.to_dict() for e in list(self._history)[-limit:]]
@@ -156,6 +170,7 @@ class EventBus:
             "knowledge_count": self._state["knowledge_count"],
             "agent_count": len(self._state["agents_online"]),
             "room_count": len(self._state["rooms"]),
+            "owner_fp": self._owner_fp,
         }
 
     @property

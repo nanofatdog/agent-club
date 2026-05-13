@@ -197,6 +197,27 @@
   .evt-trust { background: rgba(245,158,11,.15);  color: var(--warn); }
   .evt-know  { background: rgba(59,130,246,.15);  color: #60a5fa; }
 
+  /* ── decrypted message highlight ─────────────── */
+  .msg-decrypted {
+    border-left: 3px solid var(--online);
+    background: rgba(34,197,94,.04);
+  }
+  .msg-decrypted .preview {
+    color: #86efac !important;
+    font-style: normal;
+  }
+  .lock-icon {
+    font-size: 11px;
+  }
+  .decrypted-badge {
+    background: rgba(34,197,94,.15);
+    color: var(--online);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 9px;
+    font-weight: 700;
+  }
+
   /* ── room list ────────────────────────────────── */
   .room-item {
     padding: 8px 14px;
@@ -260,6 +281,11 @@
     <span class="status-dot" id="statusDot"></span>
     Agent Club
     <span>— Live Dashboard</span>
+    <button id="btnUnlock" onclick="toggleUnlock()" style="
+      margin-left:12px;background:var(--panel);border:1px solid var(--border);
+      color:var(--dim);font:inherit;font-size:10px;padding:3px 10px;
+      border-radius:4px;cursor:pointer;
+    ">🔒 Locked</button>
   </h1>
   <div class="stats">
     <span>Agents: <strong id="statAgents">0</strong></span>
@@ -324,6 +350,9 @@ const WS_URL = `ws://${location.hostname}:${parseInt(location.port) + 1}`;
 let ws = null;
 let reconnectTimer = null;
 let events = [];
+let ownerFp = null;       // Owner's agent fingerprint (set from server state)
+let unlocked = false;     // User explicitly unlocked decrypted view
+let unlockPassword = '';  // Identity password (never leaves browser, used for local decrypt hint)
 
 function connect() {
   if (ws && ws.readyState === WebSocket.OPEN) return;
@@ -381,6 +410,12 @@ function handleMessage(msg) {
 function updateState(state) {
   if (!state) return;
 
+  // Track owner fingerprint
+  if (state.owner_fp && state.owner_fp !== ownerFp) {
+    ownerFp = state.owner_fp;
+    autoUnlock();
+  }
+
   document.getElementById('statAgents').textContent = state.agent_count || 0;
   document.getElementById('statRooms').textContent  = state.room_count || 0;
   document.getElementById('statMsgs').textContent   = state.message_count || 0;
@@ -395,18 +430,21 @@ function updateState(state) {
   if (agents.length === 0) {
     aList.innerHTML = '<div style="padding:20px;color:var(--dim);text-align:center;">No agents connected</div>';
   } else {
-    aList.innerHTML = agents.map(a => `
+    aList.innerHTML = agents.map(a => {
+      const isOwner = ownerFp && a.fingerprint === ownerFp;
+      return `
       <div class="agent-item">
         <div class="name">
           <span class="online-dot"></span>
           ${esc(a.name || 'Unknown')}
+          ${isOwner ? '<span style="font-size:10px;color:var(--accent2);margin-left:4px;">(you)</span>' : ''}
         </div>
         <div class="fp">${esc((a.fingerprint || '').slice(0,16))}...</div>
         <div class="caps">
           ${(a.capabilities || []).map(c => `<span class="cap-tag">${esc(c)}</span>`).join('')}
         </div>
       </div>
-    `).join('');
+    `}).join('');
   }
 
   // Render rooms
@@ -464,15 +502,28 @@ function addEvent(evt, isHistory) {
   const preview = esc((d.preview || d.content || '').slice(0, 80));
   const size = d.size ? ` (${d.size}B)` : '';
 
+  // Decrypted message? Show full plaintext
+  const isDecrypted = d.decrypted && d.plaintext && unlocked;
+  const isOwnerMsg = ownerFp && d.sender_fp === ownerFp;
+  const lockIcon = isDecrypted ? '🔓' : (isOwnerMsg ? '🔐' : '🔒');
+  const decryptedClass = isDecrypted ? ' msg-decrypted' : '';
+  const decryptBadge = isDecrypted
+    ? `<span class="decrypted-badge">DECRYPTED</span>`
+    : '';
+
   const html = `
-    <div class="msg-item">
+    <div class="msg-item${decryptedClass}">
       <div class="meta">
         <span class="event-type ${cls}">${label}</span>
         <span class="sender">${sender}</span>
         ${room ? `<span class="room-tag">#${room}</span>` : ''}
-        <span class="time">${time}${size}</span>
+        ${decryptBadge}
+        <span class="time">${time}${size} <span class="lock-icon">${lockIcon}</span></span>
       </div>
-      ${preview ? `<div class="preview">${preview}</div>` : ''}
+      ${isDecrypted
+        ? `<div class="preview">${esc((d.plaintext || d.preview || '').slice(0, 200))}</div>`
+        : (preview ? `<div class="preview">${preview}</div>` : '')
+      }
     </div>
   `;
 
@@ -501,6 +552,47 @@ function esc(s) {
   const div = document.createElement('div');
   div.textContent = s;
   return div.innerHTML;
+}
+
+// ── Unlock / Lock ─────────────────────────────────
+function toggleUnlock() {
+  if (unlocked) {
+    unlocked = false;
+    unlockPassword = '';
+    document.getElementById('btnUnlock').textContent = '🔒 Locked';
+    document.getElementById('btnUnlock').style.color = 'var(--dim)';
+    document.getElementById('btnUnlock').style.borderColor = 'var(--border)';
+  } else {
+    const pw = prompt('Enter your agent identity password to unlock decrypted view:\n\n(Your password never leaves this browser — it is only used as a local key hint.)', '');
+    if (pw) {
+      unlockPassword = pw;
+      unlocked = true;
+      document.getElementById('btnUnlock').textContent = '🔓 Unlocked';
+      document.getElementById('btnUnlock').style.color = 'var(--online)';
+      document.getElementById('btnUnlock').style.borderColor = 'var(--online)';
+    }
+  }
+  // Re-render feed with new unlock state
+  refreshFeed();
+}
+
+function autoUnlock() {
+  // When owner_fp detected, hint to unlock
+  if (!unlocked && ownerFp) {
+    const btn = document.getElementById('btnUnlock');
+    btn.textContent = '🔐 Unlock to read';
+    btn.style.color = 'var(--warn)';
+    btn.style.borderColor = 'var(--warn)';
+  }
+}
+
+function refreshFeed() {
+  // Clear and re-render all events with current unlock state
+  const feed = document.getElementById('listFeed');
+  feed.innerHTML = '';
+  const allEvents = [...events].reverse(); // chronological
+  allEvents.forEach(evt => addEvent(evt, true));
+  document.getElementById('countFeed').textContent = events.length;
 }
 
 // ── Boot ───────────────────────────────────────────

@@ -118,20 +118,33 @@ def cmd_start(args):
 
     transport = WebSocketTransport(host=host, port=port)
     event_bus = get_event_bus()
+    event_bus.set_owner(bundle.fingerprint)  # So dashboard knows which messages are ours
 
     async def on_message(peer_id, message):
         msg_dict = message.to_dict()
         print(f"📩 [{peer_id}] type={msg_dict.get('type','?')}")
 
+        sender_fp = msg_dict.get("sender_id", peer_id)
+        payload = msg_dict.get("payload", "")
+        plaintext = msg_dict.get("plaintext", "")  # Agent already decrypted it
+        room_id = msg_dict.get("room_id", "")
+
         # Emit to dashboard
-        event_bus.emit("message", {
-            "sender_fp": msg_dict.get("sender_id", peer_id),
+        event_data = {
+            "sender_fp": sender_fp,
             "sender_name": msg_dict.get("sender_name", peer_id[:12]),
-            "room_id": msg_dict.get("room_id", ""),
+            "room_id": room_id,
             "room_name": msg_dict.get("room_name", ""),
-            "preview": str(msg_dict.get("payload", ""))[:80],
-            "size": len(str(msg_dict.get("payload", ""))),
-        })
+            "preview": str(payload)[:80],
+            "size": len(str(payload)),
+        }
+
+        # If we decrypted it (it's our message or we're in the room), include plaintext
+        if plaintext:
+            event_data["plaintext"] = str(plaintext)
+            event_data["decrypted"] = True
+
+        event_bus.emit("message", event_data)
 
     transport.on_message(on_message)
 
