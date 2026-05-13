@@ -1,0 +1,44 @@
+# ─── .dockerignore ───────────────────────────────────
+# Exclude files from Docker build context
+
+# Python
+__pycache__/
+*.py[cod]
+*.py.class
+*.egg-info/
+dist/
+build/
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Agent data (don't bake into image)
+.agent-club/
+*.enc
+*.log
+
+# Tests
+tests/
+.pytest_cache/
+htmlcov/
+
+# Docs
+docs/
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Environment
+.env
+.env.local

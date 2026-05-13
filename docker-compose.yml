@@ -1,0 +1,127 @@
+# ─── Agent Club Docker Compose ──────────────────────
+# Easy deployment — single or multi-agent setups
+#
+# Usage:
+#   docker compose up -d                     # Start single agent
+#   docker compose up -d --scale agent=3     # Start 3 agents (test network)
+#   docker compose up tor-agent -d           # Start agent with Tor
+#   docker compose logs -f agent             # Follow logs
+#   docker compose exec agent agent-club status  # Check status
+
+version: "3.9"
+
+services:
+  # ─── Main Agent ────────────────────────────────────
+  agent:
+    build: .
+    image: agent-club:latest
+    container_name: agent-club
+    restart: unless-stopped
+    ports:
+      - "8765:8765"    # WebSocket
+      - "6881:6881/udp" # DHT
+    volumes:
+      # Persistent data (keys, knowledge, logs)
+      - agent-data:/home/agent/.agent-club
+      - agent-knowledge:/home/agent/knowledge
+      - agent-logs:/home/agent/logs
+      # Mount local source for development
+      - ./agent_club:/home/agent/agent_club:ro
+    environment:
+      AGENT_NAME: "${AGENT_NAME:-agent-club}"
+      AGENT_PORT: "8765"
+      DHT_PORT: "6881"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; s=socket.socket(); s.connect(('127.0.0.1',8765)); s.close()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - agent-net
+    command: ["python", "-m", "agent_club", "start", "--host", "0.0.0.0", "--port", "8765"]
+
+  # ─── Agent with Tor ────────────────────────────────
+  tor-agent:
+    build: .
+    image: agent-club:latest
+    container_name: agent-club-tor
+    restart: unless-stopped
+    profiles: ["tor"]
+    ports:
+      - "8766:8765"     # WebSocket (alt port)
+    volumes:
+      - tor-agent-data:/home/agent/.agent-club
+      - tor-agent-logs:/home/agent/logs
+    environment:
+      AGENT_NAME: "tor-agent"
+      AGENT_PORT: "8765"
+    depends_on:
+      tor-daemon:
+        condition: service_healthy
+    networks:
+      - agent-net
+    command: ["python", "-m", "agent_club", "start", "--host", "0.0.0.0", "--port", "8765"]
+
+  # ─── Tor Daemon (for onion hidden service) ─────────
+  tor-daemon:
+    image: osminogin/tor-simple:latest
+    container_name: agent-club-tor-daemon
+    profiles: ["tor"]
+    restart: unless-stopped
+    ports:
+      - "9050:9050"   # SOCKS
+      - "9051:9051"   # Control
+    volumes:
+      - tor-data:/var/lib/tor
+    environment:
+      TOR_SOCKS_PORT: "9050"
+      TOR_CONTROL_PORT: "9051"
+      TOR_CONTROL_PASSWORD: "agentclub"
+    healthcheck:
+      test: ["CMD", "curl", "-x", "socks5h://127.0.0.1:9050", "https://check.torproject.org/api/ip"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - agent-net
+
+  # ─── Bootstrap Node (DHT seed) ─────────────────────
+  bootstrap:
+    build: .
+    image: agent-club:latest
+    container_name: agent-club-bootstrap
+    profiles: ["full", "bootstrap"]
+    restart: unless-stopped
+    ports:
+      - "6882:6881/udp"  # DHT bootstrap
+    volumes:
+      - bootstrap-data:/home/agent/.agent-club
+    environment:
+      AGENT_NAME: "bootstrap-node"
+      DHT_PORT: "6881"
+    networks:
+      - agent-net
+    command: ["python", "-m", "agent_club", "start", "--host", "0.0.0.0", "--port", "8765"]
+
+# ─── Volumes ─────────────────────────────────────────
+volumes:
+  agent-data:
+    driver: local
+  agent-knowledge:
+    driver: local
+  agent-logs:
+    driver: local
+  tor-agent-data:
+    driver: local
+  tor-agent-logs:
+    driver: local
+  tor-data:
+    driver: local
+  bootstrap-data:
+    driver: local
+
+# ─── Network ─────────────────────────────────────────
+networks:
+  agent-net:
+    driver: bridge
+    name: agent-club-net

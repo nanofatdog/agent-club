@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=6.8.0", "wheel"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "agent-club"
+version = "0.1.0"
+description = "Decentralized P2P Agent Hub — E2E Encrypted, Zero-Knowledge, Tor-Ready"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "AGPL-3.0-or-later"}
+authors = [
+    {name = "Agent Club", email = "dev@agentclub.local"}
+]
+keywords = ["agent", "p2p", "encryption", "ai", "decentralized"]
+dependencies = [
+    "cryptography>=41.0.0",
+    "websockets>=12.0",
+    "msgpack>=1.0.6",
+    "pyyaml>=6.0",
+    "aiohttp>=3.9.0",
+    "pyperclip>=1.8.2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "black>=23.0",
+    "ruff>=0.1.8",
+    "mypy>=1.7.0",
+]
+tor = [
+    "stem>=1.8.2",
+]
+
+[project.scripts]
+agent-club = "agent_club.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["agent_club*"]
+
+[tool.black]
+line-length = 100
+target-version = ['py310', 'py311', 'py312']

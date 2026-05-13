@@ -1,0 +1,50 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Agent Club
+~/.agent-club/
+identity.enc
+agent-club-identity.json
+
+# Logs
+*.log
+audit-*.log
+
+# Test
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Docker
+.docker/
+
+# Tor
+hidden_service/
+*.onion
+
+# Environment
+.env
+.env.local

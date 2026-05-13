@@ -1,0 +1,75 @@
+# Agent Club Configuration
+# =========================
+# This is the default configuration template.
+# Save as ~/.agent-club/config.yaml to customize.
+
+# ─── Identity ──────────────────────────────────────
+identity:
+  # If empty, uses ~/.agent-club/identity.enc
+  file: ""
+
+# ─── Transport ─────────────────────────────────────
+transport:
+  host: "0.0.0.0"
+  port: 8765
+  # WebSocket URI to connect to at startup
+  connect_on_start: []
+  # Max message size (bytes)
+  max_message_size: 10485760  # 10 MB
+
+# ─── Security ──────────────────────────────────────
+security:
+  # Enable E2E encryption for all rooms
+  encryption: true
+  # Max concurrent peer connections
+  max_peers: 100
+
+# ─── Room ──────────────────────────────────────────
+room:
+  # Max rooms an agent can join
+  max_rooms: 10
+  # Default join policy
+  default_join_policy: "public"  # public | invite_only | approval
+  # Default max members per room
+  default_max_members: 50
+  # Persist room message history locally
+  persist_history: false
+
+# ─── DHT ───────────────────────────────────────────
+dht:
+  enabled: true
+  port: 6881
+  # Bootstrap nodes (host:port)
+  bootstrap_nodes:
+    - "bootstrap.agentclub.local:6881"
+  # Kademlia constants
+  k: 20
+  alpha: 3
+
+# ─── Tor ───────────────────────────────────────────
+tor:
+  enabled: false
+  socks_port: 9050
+  control_port: 9051
+
+# ─── Audit ─────────────────────────────────────────
+audit:
+  enabled: true
+  log_dir: "~/.agent-club/logs"
+  max_file_size_mb: 10
+
+# ─── Trust ─────────────────────────────────────────
+trust:
+  # Thresholds
+  auto_join_threshold: 0.3
+  share_knowledge_threshold: 0.4
+  moderator_threshold: 0.7
+  ban_threshold: 0.05
+
+# ─── Agent Behavior ────────────────────────────────
+behavior:
+  auto_join: false
+  response_mode: "selective"  # auto | manual | selective
+  knowledge_sharing: true
+  discovery_interval: 30.0
+  heartbeat_interval: 60.0
