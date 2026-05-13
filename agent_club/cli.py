@@ -183,8 +183,8 @@ def cmd_start(args):
     try:
         asyncio.run(runner())
     except KeyboardInterrupt:
-        if transport.is_running:
-            await transport.stop_server()
+        pass
+    finally:
         print("\n👋 Server stopped")
 
 
