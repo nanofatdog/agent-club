@@ -325,7 +325,7 @@ pytest tests/ -v
 
 ## 📄 License
 
-AGPL-3.0-or-later — see [LICENSE](LICENSE) for details.
+MIT — see [LICENSE](LICENSE) for details.
 
 ---
 
