@@ -102,9 +102,10 @@ def _load_identity(password: str = None):
 
 
 def cmd_start(args):
-    """เริ่ม agent server (WebSocket)."""
+    """เริ่ม agent server (WebSocket) พร้อม optional web viewer."""
     import asyncio
     from agent_club.network.transport import WebSocketTransport
+    from agent_club.network.events import get_event_bus, AGENT_ONLINE
 
     bundle = _load_identity(args.password)
     if not bundle:
@@ -112,27 +113,65 @@ def cmd_start(args):
 
     host = args.host or "0.0.0.0"
     port = args.port or 8765
+    use_viewer = getattr(args, 'viewer', False)
+    viewer_port = getattr(args, 'viewer_port', None) or 8765  # Same port as agent by default
 
     transport = WebSocketTransport(host=host, port=port)
+    event_bus = get_event_bus()
 
     async def on_message(peer_id, message):
-        print(f"📩 [{peer_id}] {message.to_dict()}")
+        msg_dict = message.to_dict()
+        print(f"📩 [{peer_id}] type={msg_dict.get('type','?')}")
+
+        # Emit to dashboard
+        event_bus.emit("message", {
+            "sender_fp": msg_dict.get("sender_id", peer_id),
+            "sender_name": msg_dict.get("sender_name", peer_id[:12]),
+            "room_id": msg_dict.get("room_id", ""),
+            "room_name": msg_dict.get("room_name", ""),
+            "preview": str(msg_dict.get("payload", ""))[:80],
+            "size": len(str(msg_dict.get("payload", ""))),
+        })
 
     transport.on_message(on_message)
 
     print(f"🌟 Agent Club server starting...")
     print(f"   Agent: {bundle.name} ({bundle.fingerprint})")
     print(f"   Listen: ws://{host}:{port}")
-    print(f"   Press Ctrl+C to stop\n")
 
     async def runner():
         await transport.start_server()
-        await asyncio.Event().wait()  # Run forever
+
+        # Emit our own agent online event
+        event_bus.emit(AGENT_ONLINE, {
+            "fingerprint": bundle.fingerprint,
+            "name": bundle.name,
+            "capabilities": [],
+        })
+
+        # Start viewer if requested
+        viewer = None
+        if use_viewer:
+            from agent_club.network.viewer import ViewerServer
+            viewer = ViewerServer(
+                host="0.0.0.0",
+                port=viewer_port,
+                event_bus=event_bus,
+            )
+            await viewer.start()
+            print(f"   Viewer: http://0.0.0.0:{viewer_port}")
+            print(f"           http://localhost:{viewer_port}")
+            print(f"   WS:     ws://localhost:{viewer_port + 1}")
+        print(f"   Press Ctrl+C to stop\n")
+
+        # Wait forever (or until interrupted)
+        await asyncio.Event().wait()
 
     try:
         asyncio.run(runner())
     except KeyboardInterrupt:
-        transport.stop_server()
+        if transport.is_running:
+            await transport.stop_server()
         print("\n👋 Server stopped")
 
 
@@ -365,6 +404,45 @@ def cmd_identity(args):
             print(f"❌ Import failed: {e}")
 
 
+def cmd_view(args):
+    """เปิด web dashboard viewer (standalone mode)."""
+    import asyncio
+    from agent_club.network.viewer import ViewerServer
+    from agent_club.network.events import get_event_bus
+
+    bundle = _load_identity(args.password)
+    bundle_name = bundle.name if bundle else "Viewer"
+    bundle_fp = bundle.fingerprint if bundle else "—"
+
+    host = "0.0.0.0"
+    port = args.port or 8765
+    event_bus = get_event_bus()
+
+    # Emit our own presence
+    event_bus.emit("agent_online", {
+        "fingerprint": bundle_fp,
+        "name": bundle_name,
+        "capabilities": ["viewer"],
+    })
+
+    viewer = ViewerServer(host=host, port=port, event_bus=event_bus)
+
+    async def runner():
+        await viewer.start()
+
+    print(f"📺 Agent Club Dashboard")
+    print(f"   Viewer: http://0.0.0.0:{port}")
+    print(f"           http://localhost:{port}")
+    print(f"   API:    http://localhost:{port}/api/state")
+    print(f"   WS:     ws://localhost:{port + 1}")
+    print(f"   Press Ctrl+C to stop\n")
+
+    try:
+        asyncio.run(runner())
+    except KeyboardInterrupt:
+        print("\n👋 Viewer stopped")
+
+
 def cmd_config(args):
     """แสดง/จัดการ config."""
     if args.subcommand == "show":
@@ -422,6 +500,13 @@ def main():
     start_parser.add_argument("--host", help="Bind address (default: 0.0.0.0)")
     start_parser.add_argument("--port", type=int, help="Bind port (default: 8765)")
     start_parser.add_argument("--password", help="Identity password")
+    start_parser.add_argument("--viewer", action="store_true", help="Enable web dashboard viewer")
+    start_parser.add_argument("--viewer-port", type=int, help="Viewer port (default: same as --port)")
+
+    # view
+    view_parser = subparsers.add_parser("view", help="Open web dashboard viewer (standalone)")
+    view_parser.add_argument("--port", type=int, help="Viewer port (default: 8765)")
+    view_parser.add_argument("--password", help="Identity password")
 
     # connect
     connect_parser = subparsers.add_parser("connect", help="Connect to another agent")
@@ -507,6 +592,7 @@ def main():
     commands = {
         "init": cmd_init,
         "start": cmd_start,
+        "view": cmd_view,
         "connect": cmd_connect,
         "room": cmd_room,
         "knowledge": cmd_knowledge,

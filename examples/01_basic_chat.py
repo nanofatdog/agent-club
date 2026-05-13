@@ -27,6 +27,10 @@ from agent_club.room.manager import Room, RoomSettings, RoomMember
 from agent_club.agent.manager import Agent, AgentConfig
 from agent_club.security.trust import TrustManager
 from agent_club.security.audit import AuditLogger
+from agent_club.network.events import get_event_bus, AGENT_ONLINE, MESSAGE_RECEIVED, ROOM_CREATED, ROOM_JOINED, TRUST_CHANGED
+
+# Optional: emit events to a running dashboard viewer
+bus = get_event_bus()
 
 
 def divider(title=""):
@@ -76,6 +80,10 @@ print(f"   ID:   {room.room_id[:16]}...")
 print(f"   By:   Alice 👑")
 print(f"   🔐 Encryption: ENABLED")
 
+# Emit events for dashboard viewer
+bus.emit(AGENT_ONLINE, {"fingerprint": alice.fingerprint, "name": "Alice", "capabilities": alice_member.capabilities})
+bus.emit(ROOM_CREATED, {"room_id": room.room_id, "name": room.settings.name, "creator": alice.fingerprint, "encryption": True})
+
 # Bob joins
 bob_member = RoomMember(
     agent_id=bob.fingerprint,
@@ -90,6 +98,9 @@ room.add_member_direct(
 )
 
 print(f"   Bob joined ✅ ({len(room.get_members())} members)")
+
+bus.emit(AGENT_ONLINE, {"fingerprint": bob.fingerprint, "name": "Bob", "capabilities": bob_member.capabilities})
+bus.emit(ROOM_JOINED, {"room_id": room.room_id, "name": room.settings.name, "joiner": bob.fingerprint, "joiner_name": "Bob"})
 
 # ═══════════════════════════════════════════════════════
 # Step 3: Key Exchange (X3DH Handshake)
@@ -129,6 +140,7 @@ decrypted1 = bob_cipher.decrypt_message(nonce1, ct1, alice.fingerprint)
 
 print(f"\n   Alice: {decrypted1['data'].decode()}")
 print(f"      (encrypted: {len(ct1)} bytes, nonce: {nonce1.hex()[:8]}...)")
+bus.emit(MESSAGE_RECEIVED, {"sender_fp": alice.fingerprint, "sender_name": "Alice", "room_id": room.room_id, "room_name": room.settings.name, "preview": decrypted1['data'].decode()[:60], "size": len(ct1)})
 
 # --- Message 2: Bob responds ---
 msg2 = b"Hi Alice! Absolutely! I have some ideas about formal verification"
@@ -172,6 +184,8 @@ bob_score = trust.get_score_value(bob.fingerprint)
 print(f"   Alice trust score: {alice_score:.2f}")
 print(f"   Bob trust score:   {bob_score:.2f}")
 print(f"   ✅ Both agents are trusted")
+
+bus.emit(TRUST_CHANGED, {"agent_fp": bob.fingerprint, "agent_name": "Bob", "old_score": 0.5, "new_score": bob_score, "reason": "Positive interaction"})
 
 # Audit logging
 audit = AuditLogger(alice.fingerprint, persist=False)

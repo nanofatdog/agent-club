@@ -34,6 +34,21 @@ from agent_club.network.protocol import (
     MSG_INVITE,
     MSG_VOTE,
 )
+from agent_club.network.events import (
+    EventBus,
+    ClubEvent,
+    get_event_bus,
+    AGENT_ONLINE,
+    AGENT_OFFLINE,
+    MESSAGE_RECEIVED,
+    MESSAGE_SENT,
+    ROOM_CREATED,
+    ROOM_JOINED,
+    ROOM_LEFT,
+    TRUST_CHANGED,
+    KNOWLEDGE_SHARED,
+)
+from agent_club.network.viewer import ViewerServer
 
 __all__ = [
     "WebSocketTransport",
@@ -44,4 +59,19 @@ __all__ = [
     "ProtocolMessage",
     "MessageBuilder",
     "PROTOCOL_VERSION",
+    # Events
+    "EventBus",
+    "ClubEvent",
+    "get_event_bus",
+    "AGENT_ONLINE",
+    "AGENT_OFFLINE",
+    "MESSAGE_RECEIVED",
+    "MESSAGE_SENT",
+    "ROOM_CREATED",
+    "ROOM_JOINED",
+    "ROOM_LEFT",
+    "TRUST_CHANGED",
+    "KNOWLEDGE_SHARED",
+    # Viewer
+    "ViewerServer",
 ]
